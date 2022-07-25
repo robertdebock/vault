@@ -146,6 +146,7 @@ type issuerEntry struct {
 	LeafNotAfterBehavior certutil.NotAfterBehavior `json:"not_after_behavior"`
 	Usage                issuerUsage               `json:"usage"`
 	RevocationSigAlg     x509.SignatureAlgorithm   `json:"revocation_signature_algorithm"`
+	AIAURIs              *certutil.URLEntries      `json:"aia_uris,omitempty"`
 }
 
 type localCRLConfigEntry struct {
@@ -471,6 +472,19 @@ func (i issuerEntry) CanMaybeSignWithAlgo(algo x509.SignatureAlgorithm) error {
 	}
 
 	return fmt.Errorf("unable to use issuer of type %v to sign with %v key type", cert.PublicKeyAlgorithm.String(), algo.String())
+}
+
+func (i issuerEntry) GetAIAURLs(sc *storageContext) (urls *certutil.URLEntries, err error) {
+	// Default to the per-issuer AIA URLs.
+	urls = i.AIAURIs
+
+	// If none are set (either due to a nil entry or because no URLs have
+	// been provided), fall back to the global AIA URL config.
+	if urls == nil || (len(urls.IssuingCertificates) == 0 && len(urls.CRLDistributionPoints) == 0 && len(urls.OCSPServers) == 0) {
+		urls, err = getURLs(sc.Context, sc.Storage)
+	}
+
+	return urls, err
 }
 
 func (sc *storageContext) listIssuers() ([]issuerID, error) {
