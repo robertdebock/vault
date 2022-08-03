@@ -50,14 +50,40 @@ variable "tfc_api_token" {
   type        = string
 }
 
+variable "vault_install_dir" {
+  type        = string
+  description = "The directory where the vault binary will be installed"
+  default     = "/opt/vault/bin"
+}
+
+variable "vault_local_binary_path" {
+  type        = string
+  description = "The path of the local binary that we're upgrading to"
+  default     = "./support/vault"
+}
+
 variable "vault_instance_type" {
   description = "The instance type to use for the Vault backend"
   type        = string
   default     = "t3.small"
 }
 
+variable "vault_instance_count" {
+  description = "How many instances to create for the Vault cluster"
+  type        = number
+  default     = 3
+}
+
 variable "vault_license_path" {
   description = "The path to a valid Vault enterprise edition license. This is only required for non-oss editions"
   type        = string
   default     = null
+}
+
+variable "vault_upgrade_initial_release" {
+  default = {
+    edition = "oss"
+    // vault 1.10.5 has a known issue with retry_join.
+    version = "1.10.4"
+  }
 }

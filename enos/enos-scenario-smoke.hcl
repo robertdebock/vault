@@ -1,111 +1,3 @@
-terraform_cli "default" {
-  plugin_cache_dir = var.terraform_plugin_cache_dir != null ? abspath(var.terraform_plugin_cache_dir) : null
-
-  provider_installation {
-    network_mirror {
-      url     = "https://enos-provider-stable.s3.amazonaws.com/"
-      include = ["hashicorp.com/qti/enos"]
-    }
-    direct {
-      exclude = [
-        "hashicorp.com/qti/enos"
-      ]
-    }
-  }
-
-  credentials "app.terraform.io" {
-    token = var.tfc_api_token
-  }
-}
-
-terraform "default" {
-  required_version = ">= 1.0.0"
-
-  required_providers {
-    aws = {
-      source = "hashicorp/aws"
-    }
-
-    enos = {
-      # source = "app.terraform.io/hashicorp-qti/enos"
-      source = "hashicorp.com/qti/enos"
-    }
-  }
-}
-
-provider "aws" "default" {
-  region = var.aws_region
-}
-
-provider "enos" "rhel" {
-  transport = {
-    ssh = {
-      user             = "ec2_user"
-      private_key_path = abspath(var.aws_ssh_private_key_path)
-    }
-  }
-}
-
-provider "enos" "ubuntu" {
-  transport = {
-    ssh = {
-      user             = "ubuntu"
-      private_key_path = abspath(var.aws_ssh_private_key_path)
-    }
-  }
-}
-
-module "az_finder" {
-  source = "./modules/az_finder"
-}
-
-module "backend_consul" {
-  source = "app.terraform.io/hashicorp-qti/aws-consul/enos"
-
-  project_name    = "qti-enos-provider"
-  environment     = "ci"
-  common_tags     = var.tags
-  ssh_aws_keypair = "enos-ci-ssh-keypair"
-
-  # Set this to a real license vault if using an Enterprise edition of Consul
-  consul_license = "none"
-}
-
-module "backend_raft" {
-  source = "./modules/backend_raft"
-}
-
-module "build_crt" {
-  source = "./modules/build_crt"
-}
-
-module "build_local" {
-  source = "./modules/build_local"
-}
-
-module "create_vpc" {
-  source = "app.terraform.io/hashicorp-qti/aws-infra/enos"
-
-  project_name      = "qti-enos-provider"
-  environment       = "ci"
-  common_tags       = var.tags
-  ami_architectures = ["amd64", "arm64"]
-}
-
-module "vault_cluster" {
-  source  = "app.terraform.io/hashicorp-qti/aws-vault/enos"
-  version = "0.6.0" // pin to 0.6.0 until VAULT-7338 is fixed.
-
-  project_name    = "vault-enos-integration"
-  environment     = "ci"
-  common_tags     = var.tags
-  ssh_aws_keypair = "enos-ci-ssh-keypair"
-}
-
-module "read_license" {
-  source = "./modules/read_license"
-}
-
 scenario "smoke" {
   matrix {
     arch           = ["amd64", "arm64"]
@@ -181,7 +73,9 @@ scenario "smoke" {
     module     = "backend_${matrix.backend}"
     depends_on = [step.create_vpc]
 
-    providers = matrix.backend == "consul" ? { enos = provider.enos.ubuntu } : {}
+    providers = {
+      enos = provider.enos.ubuntu
+    }
 
     variables {
       ami_id = step.create_vpc.ami_ids[matrix.distro][matrix.arch]
@@ -195,7 +89,6 @@ scenario "smoke" {
     }
   }
 
-  // TODO: Make shamir unsealing work
   step "create_vault_cluster" {
     module = module.vault_cluster
     depends_on = [
@@ -212,8 +105,10 @@ scenario "smoke" {
       consul_cluster_tag        = step.create_backend_cluster.consul_cluster_tag
       enos_transport_user       = local.enos_transport_user[matrix.distro]
       instance_type             = var.vault_instance_type
+      instance_count            = var.vault_instance_count
       kms_key_arn               = matrix.unseal_method == "aws_kms" ? step.create_vpc.kms_key_arn : null
       storage_backend           = matrix.backend
+      vault_install_dir         = var.vault_install_dir
       vault_local_artifact_path = step.build_vault.artifact_path
       vault_license             = matrix.edition != "oss" ? step.read_license.license : null
       vpc_id                    = step.create_vpc.vpc_id

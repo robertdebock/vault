@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
+}
+
 variable "instance_type" {
   default = ["t3.small"]
   type    = list(string)

@@ -1,5 +1,8 @@
+# TODO: make sure this accurately reflects our variables
+
 # aws_region is the region where we'll create test infrastructure
-# aws_region = "us-west-2"
+# for the smoke scenario
+# aws_region = "us-west-1"
 
 # aws_ssh_keypair_name is the AWS keypair to use for SSH
 # aws_ssh_keypair_name = "enos-ci-ssh-keypair"
@@ -21,7 +24,6 @@
 # vault_license_path is the path to a valid Vault Enterprise license. This is
 # only required for non-oss editions.
 
-# TODO: make sure we support local builder variants
 # vault_local_artifact_path is the path to a Vault install bundle, eg. vault.zip. This can be taken
 # from releases.hashicorp.com or Artifactory. The local builder variant will create
 # one from the existing branch.
