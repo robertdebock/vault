@@ -16,6 +16,12 @@ variable "aws_ssh_private_key_path" {
   default     = "./support/private_key.pem"
 }
 
+variable "backend_instance_type" {
+  description = "The instance type to use for the Vault backend"
+  type        = string
+  default     = "t3.small"
+}
+
 variable "crt_bundle_path" {
   description = "Path to CRT generated or local vault.zip bundle"
   type        = string
@@ -42,6 +48,12 @@ variable "terraform_plugin_cache_dir" {
 variable "tfc_api_token" {
   description = "The Terraform Cloud QTI Organization API token."
   type        = string
+}
+
+variable "vault_instance_type" {
+  description = "The instance type to use for the Vault backend"
+  type        = string
+  default     = "t3.small"
 }
 
 variable "vault_license_path" {

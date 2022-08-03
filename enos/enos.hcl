@@ -55,13 +55,8 @@ provider "enos" "ubuntu" {
   }
 }
 
-module "enos_create_vpc" {
-  source = "app.terraform.io/hashicorp-qti/aws-infra/enos"
-
-  project_name      = "qti-enos-provider"
-  environment       = "ci"
-  common_tags       = var.tags
-  ami_architectures = ["amd64", "arm64"]
+module "az_finder" {
+  source = "./modules/az_finder"
 }
 
 module "backend_consul" {
@@ -86,6 +81,15 @@ module "build_crt" {
 
 module "build_local" {
   source = "./modules/build_local"
+}
+
+module "create_vpc" {
+  source = "app.terraform.io/hashicorp-qti/aws-infra/enos"
+
+  project_name      = "qti-enos-provider"
+  environment       = "ci"
+  common_tags       = var.tags
+  ami_architectures = ["amd64", "arm64"]
 }
 
 module "vault_cluster" {
@@ -126,10 +130,6 @@ scenario "smoke" {
       "local" = "/tmp",
       "crt"   = var.crt_bundle_path == null ? null : abspath(var.crt_bundle_path)
     }
-    default_instances_types = {
-      amd64 = "t3a.small"
-      arm64 = "t4g.small"
-    }
     enos_provider = {
       rhel   = provider.enos.rhel
       ubuntu = provider.enos.ubuntu
@@ -148,11 +148,23 @@ scenario "smoke" {
     }
   }
 
-  step "create_vpc" {
-    module = module.enos_create_vpc
+  step "find_azs" {
+    module = module.az_finder
 
     variables {
-      ami_architectures = [matrix.arch]
+      instance_type = [
+        var.backend_instance_type,
+        var.vault_instance_type
+      ]
+    }
+  }
+
+  step "create_vpc" {
+    module = module.create_vpc
+
+    variables {
+      ami_architectures  = [matrix.arch]
+      availability_zones = step.find_azs.availability_zones
     }
   }
 
@@ -172,13 +184,14 @@ scenario "smoke" {
     providers = matrix.backend == "consul" ? { enos = provider.enos.ubuntu } : {}
 
     variables {
-      ami_id      = step.create_vpc.ami_ids[matrix.distro][matrix.arch]
-      vpc_id      = step.create_vpc.vpc_id
-      kms_key_arn = step.create_vpc.kms_key_arn
+      ami_id = step.create_vpc.ami_ids[matrix.distro][matrix.arch]
       consul_release = {
         edition = "oss"
         version = matrix.consul_version
       }
+      instance_type = var.backend_instance_type
+      kms_key_arn   = step.create_vpc.kms_key_arn
+      vpc_id        = step.create_vpc.vpc_id
     }
   }
 
@@ -196,13 +209,14 @@ scenario "smoke" {
 
     variables {
       ami_id                    = step.create_vpc.ami_ids[matrix.distro][matrix.arch]
-      vpc_id                    = step.create_vpc.vpc_id
+      consul_cluster_tag        = step.create_backend_cluster.consul_cluster_tag
+      enos_transport_user       = local.enos_transport_user[matrix.distro]
+      instance_type             = var.vault_instance_type
       kms_key_arn               = matrix.unseal_method == "aws_kms" ? step.create_vpc.kms_key_arn : null
       storage_backend           = matrix.backend
-      enos_transport_user       = local.enos_transport_user[matrix.distro]
-      consul_cluster_tag        = step.create_backend_cluster.consul_cluster_tag
       vault_local_artifact_path = step.build_vault.artifact_path
       vault_license             = matrix.edition != "oss" ? step.read_license.license : null
+      vpc_id                    = step.create_vpc.vpc_id
     }
   }
 
