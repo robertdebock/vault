@@ -16,6 +16,12 @@ variable "aws_ssh_private_key_path" {
   default     = "./support/private_key.pem"
 }
 
+variable "crt_bundle_path" {
+  description = "Path to CRT generated or local vault.zip bundle"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to add to AWS resources"
   type        = map(string)
@@ -42,9 +48,4 @@ variable "vault_license_path" {
   description = "The path to a valid Vault enterprise edition license. This is only required for non-oss editions"
   type        = string
   default     = null
-}
-
-variable "vault_local_artifact_path" {
-  description = "The path to a local Vault install bundle"
-  type        = string
 }

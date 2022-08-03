@@ -22,10 +22,9 @@ jobs:
       build-date: ${{ steps.get-build-date.outputs.build-date }}
     steps:
       - uses: actions/checkout@v3
-      # TODO: Finding Go version was not originally in this workflow but enos needs it. No make target for this; how do we get it?
-      # - name: Determine Go version
-      #   run: |
-        
+      - uses: actions/setup-go@v2
+      - name: Determine Go version
+        run: echo "::set-output name=go-version::$(go mod edit -json | jq .Go)"
       - name: Get product version
         id: get-product-version
         run: |
@@ -35,37 +34,9 @@ jobs:
           echo "::set-output name=product-base-version::${BASE_VERSION}"
       - name: Get build date
         id: get-build-date
-        run: | 
+        run: |
           make build-date
           echo "::set-output name=build-date::$(make build-date)"
-
-
-  # get-product-version:
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     product-version: ${{ steps.get-product-version.outputs.product-version }}
-  #     product-base-version: ${{ steps.get-product-version.outputs.product-base-version }}
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: get product version
-  #       id: get-product-version
-  #       run: |
-  #         make version
-  #         IFS="-" read BASE_VERSION _other <<< "$(make version)"
-  #         echo "::set-output name=product-version::$(make version)"
-  #         echo "::set-output name=product-base-version::${BASE_VERSION}"
-
-  # get-build-date:
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     build-date: ${{ steps.get-build-date.outputs.build-date }}
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: get build date
-  #       id: get-build-date
-  #       run: |
-  #         make build-date
-  #         echo "::set-output name=build-date::$(make build-date)"
 
   generate-metadata-file:
     needs: product-metadata
@@ -93,7 +64,6 @@ jobs:
       matrix:
         goos: [ freebsd, windows, netbsd, openbsd, solaris ]
         goarch: [ "386", "amd64", "arm" ]
-        go: [ "1.17.12" ]
         exclude:
           - goos: solaris
             goarch: 386
@@ -103,14 +73,14 @@ jobs:
             goarch: arm
       fail-fast: true
 
-    name: Go ${{ matrix.go }} ${{ matrix.goos }} ${{ matrix.goarch }} build
+    name: Go ${{ needs.product-metadata.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
 
     steps:
       - uses: actions/checkout@v2
       - name: Setup go
         uses: actions/setup-go@v2
         with:
-          go-version: ${{ matrix.go }}
+          go-version: ${{ needs.product-metadata.outputs.go-version }}
       - name: Setup node and yarn
         uses: actions/setup-node@v2
         with:
@@ -145,10 +115,9 @@ jobs:
       matrix:
         goos: [linux]
         goarch: ["arm", "arm64", "386", "amd64"]
-        go: ["1.17.12"]
       fail-fast: true
 
-    name: Go ${{ matrix.go }} ${{ matrix.goos }} ${{ matrix.goarch }} build
+    name: Go ${{ needs.product-metadata.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
 
     steps:
       - uses: actions/checkout@v2
@@ -156,7 +125,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v2
         with:
-          go-version: ${{ matrix.go }}
+          go-version: ${{ needs.product-metadata.outputs.go-version }}
       - name: Setup node and yarn
         uses: actions/setup-node@v2
         with:
@@ -222,16 +191,15 @@ jobs:
       matrix:
         goos: [ darwin ]
         goarch: [ "amd64", "arm64" ]
-        go: [ "1.17.12" ]
       fail-fast: true
-    name: Go ${{ matrix.go }} ${{ matrix.goos }} ${{ matrix.goarch }} build
+    name: Go ${{ needs.product-metadata.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
     steps:
       - uses: actions/checkout@v2
 
       - name: Setup go
         uses: actions/setup-go@v2
         with:
-          go-version: ${{ matrix.go }}
+          go-version: ${{ needs.product-metadata.outputs.go-version }}
       - name: Setup node and yarn
         uses: actions/setup-node@v2
         with:
@@ -323,5 +291,4 @@ jobs:
     with:
       # TODO: confirm this the artifact name structure we expect here
       artifact-name: "vault_${{ needs.product-metadata.outputs.product-version }}_linux_amd64.zip"
-      go-version: ${{ needs.product-metadata.outputs.go-version }}
     secrets: inherit

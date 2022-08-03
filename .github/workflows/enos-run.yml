@@ -9,9 +9,6 @@ on:
       artifact-name:
         required: true
         type: string
-      go-version:
-        required: true
-        type: string
 
 env:
   PKG_NAME: vault
@@ -30,10 +27,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Set up Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ inputs.go-version }}
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -45,7 +38,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: us-west-2
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           role-skip-session-tagging: true
           role-duration-seconds: 3600
@@ -58,39 +51,52 @@ jobs:
           mkdir -p ./enos/support
           echo "${{ secrets.ENOS_CI_SSH_KEYPAIR }}" > ./enos/support/private_key.pem
           chmod 600 ./enos/support/private_key.pem
+      - name: Download Linux AMD64 Vault bundle
+        id: download
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ./enos/support/downloads
+      - name: Unzip and rename Vault bundle
+        run: |
+          unzip ${{steps.download.outputs.download-path}}/*.zip -d enos/support
+          mv ${{steps.download.outputs.download-path}}/*.zip enos/support/vault.zip
       - name: Run Enos scenario
         id: run
         # Continue once and retry
         continue-on-error: true
         env:
-          ENOS_VAR_aws_region: us-east-1
+          ENOS_VAR_aws_region: us-west-2
           ENOS_VAR_aws_ssh_keypair_name: enos-ci-ssh-keypair
           ENOS_VAR_aws_ssh_private_key_path: ./support/private_key.pem
           ENOS_VAR_tfc_api_token: ${{ secrets.TF_API_TOKEN }}
+          ENOS_VAR_crt_bundle_path: ./support/vault.zip
         run: |
           export ENOS_VAR_enos_user=$GITHUB_ACTOR && \
-          enos scenario run --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
+          enos scenario run --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft builder:crt consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
       - name: Retry Enos scenario
         id: run_retry
         if: steps.run.outcome == 'failure'
         env:
-          ENOS_VAR_aws_region: us-east-1
+          ENOS_VAR_aws_region: us-west-2
           ENOS_VAR_aws_ssh_keypair_name: enos-ci-ssh-keypair
           ENOS_VAR_aws_ssh_private_key_path: ./support/private_key.pem
           ENOS_VAR_tfc_api_token: ${{ secrets.TF_API_TOKEN }}
+          ENOS_VAR_crt_bundle_path: ./support/vault.zip
         run: |
           export ENOS_VAR_enos_user=$GITHUB_ACTOR && \
-          enos scenario run --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
+          enos scenario run --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft builder:crt consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
       - name: Destroy Enos scenario
         if: ${{ always() }}
         env:
-          ENOS_VAR_aws_region: us-east-1
+          ENOS_VAR_aws_region: us-west-2
           ENOS_VAR_aws_ssh_keypair_name: enos-ci-ssh-keypair
           ENOS_VAR_aws_ssh_private_key_path: ./support/private_key.pem
           ENOS_VAR_tfc_api_token: ${{ secrets.TF_API_TOKEN }}
+          ENOS_VAR_crt_bundle_path: ./support/vault.zip
         run: |
           export ENOS_VAR_enos_user=$GITHUB_ACTOR && \
-          enos scenario destroy --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
+          enos scenario destroy --timeout 60m0s --chdir ./enos smoke arch:amd64 backend:raft builder:crt consul_version:1.12.3 distro:ubuntu edition:oss unseal_method:aws_kms
       - name: Output debug information on failure
         if: ${{ failure() }}
         run: |

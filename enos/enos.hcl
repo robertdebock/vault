@@ -1,9 +1,3 @@
-variable "tags" {
-  description = "Tags to add to AWS resources"
-  type        = map(string)
-  default     = null
-}
-
 terraform_cli "default" {
   plugin_cache_dir = var.terraform_plugin_cache_dir != null ? abspath(var.terraform_plugin_cache_dir) : null
 
@@ -28,13 +22,13 @@ terraform "default" {
   required_version = ">= 1.0.0"
 
   required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+
     enos = {
       # source = "app.terraform.io/hashicorp-qti/enos"
       source = "hashicorp.com/qti/enos"
-    }
-
-    aws = {
-      source = "hashicorp/aws"
     }
   }
 }
@@ -43,19 +37,19 @@ provider "aws" "default" {
   region = var.aws_region
 }
 
-provider "enos" "ubuntu" {
+provider "enos" "rhel" {
   transport = {
     ssh = {
-      user             = "ubuntu"
+      user             = "ec2_user"
       private_key_path = abspath(var.aws_ssh_private_key_path)
     }
   }
 }
 
-provider "enos" "rhel" {
+provider "enos" "ubuntu" {
   transport = {
     ssh = {
-      user             = "ec2_user"
+      user             = "ubuntu"
       private_key_path = abspath(var.aws_ssh_private_key_path)
     }
   }
@@ -86,10 +80,19 @@ module "backend_raft" {
   source = "./modules/backend_raft"
 }
 
-module "vault_cluster" {
-  source = "app.terraform.io/hashicorp-qti/aws-vault/enos"
+module "build_crt" {
+  source = "./modules/build_crt"
+}
 
-  project_name    = "qti-enos-provider"
+module "build_local" {
+  source = "./modules/build_local"
+}
+
+module "vault_cluster" {
+  source  = "app.terraform.io/hashicorp-qti/aws-vault/enos"
+  version = "0.6.0" // pin to 0.6.0 until VAULT-7338 is fixed.
+
+  project_name    = "vault-enos-integration"
   environment     = "ci"
   common_tags     = var.tags
   ssh_aws_keypair = "enos-ci-ssh-keypair"
@@ -101,11 +104,12 @@ module "read_license" {
 
 scenario "smoke" {
   matrix {
-    backend        = ["consul", "raft"]
-    distro         = ["ubuntu", "rhel"]
     arch           = ["amd64", "arm64"]
-    edition        = ["oss", "ent"]
+    backend        = ["consul", "raft"]
+    builder        = ["local", "crt"]
     consul_version = ["1.12.3", "1.11.7", "1.10.12"]
+    distro         = ["ubuntu", "rhel"]
+    edition        = ["oss", "ent"]
     unseal_method  = ["aws_kms", "shamir"]
   }
 
@@ -118,6 +122,14 @@ scenario "smoke" {
   ]
 
   locals {
+    build_path = {
+      "local" = "/tmp",
+      "crt"   = var.crt_bundle_path == null ? null : abspath(var.crt_bundle_path)
+    }
+    default_instances_types = {
+      amd64 = "t3a.small"
+      arm64 = "t4g.small"
+    }
     enos_provider = {
       rhel   = provider.enos.rhel
       ubuntu = provider.enos.ubuntu
@@ -126,9 +138,13 @@ scenario "smoke" {
       rhel   = "ec2-user"
       ubuntu = "ubuntu"
     }
-    default_instances_types = {
-      amd64 = "t3a.small"
-      arm64 = "t4g.small"
+  }
+
+  step "build_vault" {
+    module = matrix.builder == "crt" ? module.build_crt : module.build_local
+
+    variables {
+      path = local.build_path[matrix.builder]
     }
   }
 
@@ -185,7 +201,7 @@ scenario "smoke" {
       storage_backend           = matrix.backend
       enos_transport_user       = local.enos_transport_user[matrix.distro]
       consul_cluster_tag        = step.create_backend_cluster.consul_cluster_tag
-      vault_local_artifact_path = abspath(var.vault_local_artifact_path)
+      vault_local_artifact_path = step.build_vault.artifact_path
       vault_license             = matrix.edition != "oss" ? step.read_license.license : null
     }
   }
