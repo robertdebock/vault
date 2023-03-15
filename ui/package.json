@@ -168,7 +168,7 @@
     "swagger-ui-dist": "^3.36.2",
     "text-encoder-lite": "2.0.0",
     "walk-sync": "^2.0.2",
-    "webpack": "5.73.0",
+    "webpack": "5.76.0",
     "xstate": "^3.3.3"
   },
   "optionalDependencies": {
